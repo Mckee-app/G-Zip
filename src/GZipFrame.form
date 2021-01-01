@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<form xmlns="http://www.intellij.com/uidesigner/form/" version="1" bind-to-class="GZipFrame">
+  <grid id="27dc6" binding="pnl_root" layout-manager="GridLayoutManager" row-count="3" column-count="1" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+    <margin top="10" left="10" bottom="10" right="10"/>
+    <constraints>
+      <xy x="20" y="21" width="742" height="424"/>
+    </constraints>
+    <properties>
+      <background color="-855310"/>
+      <enabled value="true"/>
+      <preferredSize width="1000" height="500"/>
+      <visible value="true"/>
+    </properties>
+    <border type="none">
+      <color color="-16777216"/>
+    </border>
+    <children>
+      <grid id="7235e" layout-manager="GridLayoutManager" row-count="1" column-count="7" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+        <margin top="0" left="0" bottom="0" right="0"/>
+        <constraints>
+          <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties/>
+        <border type="none"/>
+        <children>
+          <component id="d5e34" class="javax.swing.JLabel">
+            <constraints>
+              <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <labelFor value="94c71"/>
+              <text value="作業ディレクトリ"/>
+            </properties>
+          </component>
+          <component id="94c71" class="javax.swing.JTextField" binding="txt_workDir">
+            <constraints>
+              <grid row="0" column="1" row-span="1" col-span="1" vsize-policy="0" hsize-policy="6" anchor="8" fill="1" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <text value=""/>
+            </properties>
+          </component>
+          <component id="b5ba7" class="javax.swing.JLabel">
+            <constraints>
+              <grid row="0" column="2" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <labelFor value="2d1b7"/>
+              <text value="拡張子"/>
+            </properties>
+          </component>
+          <component id="2d1b7" class="javax.swing.JComboBox" binding="cmb_extension" custom-create="true">
+            <constraints>
+              <grid row="0" column="3" row-span="1" col-span="1" vsize-policy="0" hsize-policy="2" anchor="8" fill="1" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties/>
+          </component>
+          <component id="9c964" class="javax.swing.JLabel">
+            <constraints>
+              <grid row="0" column="4" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <labelFor value="9bf4a"/>
+              <text value="更新日"/>
+            </properties>
+          </component>
+          <component id="9bf4a" class="javax.swing.JComboBox" binding="cmb_lastModifiedDate" custom-create="true">
+            <constraints>
+              <grid row="0" column="5" row-span="1" col-span="1" vsize-policy="0" hsize-policy="2" anchor="8" fill="1" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties/>
+          </component>
+          <component id="40969" class="javax.swing.JButton" binding="btn_search">
+            <constraints>
+              <grid row="0" column="6" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="0" fill="1" indent="0" use-parent-layout="false">
+                <preferred-size width="100" height="-1"/>
+              </grid>
+            </constraints>
+            <properties>
+              <text value="検索"/>
+            </properties>
+          </component>
+        </children>
+      </grid>
+      <grid id="506b4" layout-manager="GridLayoutManager" row-count="1" column-count="3" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+        <margin top="0" left="0" bottom="0" right="0"/>
+        <constraints>
+          <grid row="1" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties/>
+        <border type="none"/>
+        <children>
+          <component id="29b59" class="javax.swing.JCheckBox" binding="chk_deleteSL">
+            <constraints>
+              <grid row="0" column="1" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="0" fill="0" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties>
+              <text value="選択ファイル削除"/>
+            </properties>
+          </component>
+          <component id="fc894" class="javax.swing.JButton" binding="btn_fileCompression">
+            <constraints>
+              <grid row="0" column="2" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="0" fill="0" indent="0" use-parent-layout="false">
+                <preferred-size width="100" height="-1"/>
+              </grid>
+            </constraints>
+            <properties>
+              <horizontalAlignment value="0"/>
+              <text value="圧縮"/>
+            </properties>
+          </component>
+          <hspacer id="cbc64">
+            <constraints>
+              <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="1" hsize-policy="6" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
+            </constraints>
+          </hspacer>
+        </children>
+      </grid>
+      <grid id="5ec14" layout-manager="GridLayoutManager" row-count="2" column-count="2" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+        <margin top="0" left="0" bottom="0" right="0"/>
+        <constraints>
+          <grid row="2" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+        </constraints>
+        <properties/>
+        <border type="none"/>
+        <children>
+          <grid id="98787" layout-manager="GridLayoutManager" row-count="1" column-count="4" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+            <margin top="0" left="0" bottom="0" right="0"/>
+            <constraints>
+              <grid row="0" column="0" row-span="1" col-span="2" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties/>
+            <border type="none"/>
+            <children>
+              <component id="35b3a" class="javax.swing.JCheckBox" binding="chk_allSL">
+                <constraints>
+                  <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+                </constraints>
+                <properties>
+                  <selected value="false"/>
+                  <text value="全SLチェック"/>
+                </properties>
+              </component>
+              <component id="af68a" class="javax.swing.JLabel" binding="lbl_totalSize">
+                <constraints>
+                  <grid row="0" column="2" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+                </constraints>
+                <properties>
+                  <text value=""/>
+                </properties>
+              </component>
+              <component id="9c272" class="javax.swing.JLabel">
+                <constraints>
+                  <grid row="0" column="1" row-span="1" col-span="1" vsize-policy="0" hsize-policy="0" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+                </constraints>
+                <properties>
+                  <text value="合計サイズ"/>
+                </properties>
+              </component>
+              <hspacer id="ca150">
+                <constraints>
+                  <grid row="0" column="3" row-span="1" col-span="1" vsize-policy="1" hsize-policy="6" anchor="0" fill="1" indent="0" use-parent-layout="false"/>
+                </constraints>
+              </hspacer>
+            </children>
+          </grid>
+          <scrollpane id="1b244">
+            <constraints>
+              <grid row="1" column="0" row-span="1" col-span="2" vsize-policy="7" hsize-policy="7" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+            </constraints>
+            <properties/>
+            <border type="none"/>
+            <children>
+              <component id="14a36" class="javax.swing.JTable" binding="tbl_fileList">
+                <constraints/>
+                <properties>
+                  <autoCreateRowSorter value="true"/>
+                  <autoResizeMode value="0"/>
+                </properties>
+              </component>
+            </children>
+          </scrollpane>
+        </children>
+      </grid>
+    </children>
+  </grid>
+</form>
