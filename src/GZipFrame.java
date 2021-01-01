@@ -4,8 +4,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Insets;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -106,15 +104,7 @@ public class GZipFrame extends JFrame {
         }
     }
 
-    private void createUIComponents() {
-        // 拡張子のフィルタ付きコンボボックスを生成
-        createExtCmbBx();
-
-        // 更新日のフィルタ付きコンボボックスを生成
-        createDateLastModifiedCmbBx();
-    }
-
-    private enum PropKeys {
+    private static enum PropKeys {
         WORK_DIR("TextField.workDir"),
         EXTENSION("ComboBox.extension"),
         LAST_MODIFIED_DATE("ComboBox.lastModifiedDate");
@@ -124,9 +114,10 @@ public class GZipFrame extends JFrame {
         PropKeys(String key) {
             this.key = key;
         }
+
     }
 
-    private enum Column {
+    private static enum Column {
         SL(0, "SL"),
         DIR(1, "ディレクトリ"),
         FILE_NAME(2, "ファイル名"),
@@ -134,6 +125,7 @@ public class GZipFrame extends JFrame {
         SIZE(4, "サイズ");
 
         int columnNum;
+
         String columnName;
 
         Column(int columnNum, String columnName) {
@@ -149,9 +141,10 @@ public class GZipFrame extends JFrame {
             }
             return ret;
         }
+
     }
 
-    private enum Extension {
+    private static enum Extension {
         OK("ok"),
         NG("ng"),
         LOG("log"),
@@ -163,9 +156,10 @@ public class GZipFrame extends JFrame {
         Extension(String extName) {
             this.extName = extName;
         }
+
     }
 
-    private enum DateLastModified {
+    private static enum DateLastModified {
         TODAY(0, "今日"),
         ONE_YEAR_AGO(-12, "1年前"),
         TWO_YEARS_AGO(-24, "2年前"),
@@ -174,6 +168,7 @@ public class GZipFrame extends JFrame {
         FIVE_YEARS_AGO(-60, "5年前");
 
         String dateName;
+
         int months;
 
         DateLastModified(int months, String dateName) {
@@ -197,10 +192,23 @@ public class GZipFrame extends JFrame {
             }
             return null;
         }
+
     }
 
-    private enum Size {
-        B, KB, MB, GB, TB
+
+    private static enum Size {
+        B, KB, MB, GB, TB;
+    }
+
+    private static class Chunk {
+
+        private final int num;
+        private final Path path;
+
+        private Chunk(int num, Path path) {
+            this.num = num;
+            this.path = path;
+        }
     }
 
     public GZipFrame() {
@@ -242,6 +250,14 @@ public class GZipFrame extends JFrame {
 
         // ファイルテーブル設定
         setFileTable();
+    }
+
+    private void createUIComponents() {
+        // 拡張子のフィルタ付きコンボボックスを生成
+        createExtCmbBx();
+
+        // 更新日のフィルタ付きコンボボックスを生成
+        createDateLastModifiedCmbBx();
     }
 
     private void createExtCmbBx() {
@@ -293,17 +309,6 @@ public class GZipFrame extends JFrame {
 
     private String getLastModifiedDate() {
         return settings.getProperty(PropKeys.LAST_MODIFIED_DATE.key, "");
-    }
-
-    private static class Chunk {
-
-        private final int num;
-        private final Path path;
-
-        private Chunk(int num, Path path) {
-            this.num = num;
-            this.path = path;
-        }
     }
 
     /**
@@ -365,21 +370,27 @@ public class GZipFrame extends JFrame {
                     return false;
                 }
 
+                System.out.println(path.getFileName() + " (" + Thread.currentThread().getName() + ")");
+
                 int num = atomicInteger.incrementAndGet();
 
                 int percentage = BigDecimal.valueOf(num)
                     .divide(BigDecimal.valueOf(monitor.getMaximum()), 2, RoundingMode.DOWN)
                     .multiply(BigDecimal.valueOf(100)).intValue();
+
+                if (percentage == 100) {
+                    // 100%だと進捗モニターが非表示となるため99%にする
+                    percentage = 99;
+                }
+
                 setProgress(percentage);
                 publish(new Chunk(num, path));
-                System.out.println(path.getFileName());
 
-                // テスト用
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    System.err.println(e.toString());
-                }
+//                try {
+//                    Thread.sleep(50);
+//                } catch (InterruptedException e) {
+//                    System.err.println(e.toString());
+//                }
 
                 return isMatchedExtension(path) && isMatchedDate(path);
             }
@@ -449,10 +460,13 @@ public class GZipFrame extends JFrame {
                         return;
                     }
                     String message = chunk.num
+                        + "/"
+                        + monitor.getMaximum()
                         + ":"
                         + chunk.path.getFileName();
                     monitor.setNote(message);
-                    System.out.println(message);
+
+                    System.out.println(message + " (" + Thread.currentThread().getName() + ")");
                 });
             }
 
