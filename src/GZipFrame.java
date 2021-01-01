@@ -6,17 +6,19 @@ import java.awt.Dimension;
 import java.awt.Insets;
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.Reader;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -70,41 +72,33 @@ public class GZipFrame extends JFrame {
     private JCheckBox chk_allSL;
     private JLabel lbl_totalSize;
 
-    /**
-     * 設定ファイル名
-     */
-    private static final String SETTING_PROPERTIES = "setting.properties";
-
-    /**
-     * SLのデフォルト値
-     */
+    /** SLのデフォルト値 */
     private static final boolean DEFAULT_SL = Boolean.TRUE;
 
-    /**
-     * コンボボックス表示の区切り文字
-     */
+    /** コンボボックス表示の区切り文字 */
     private static final String COMBO_BOX_SEPARATOR = ",";
 
-    /**
-     * 設定ファイル
-     */
+    /** 設定ファイル名 */
+    private static final String SETTING_PROPERTIES = "setting.properties";
+
+    /** 設定ファイル */
     private static final Properties settings;
 
+    /** 文字コード */
+    private static final Charset CHARSET = StandardCharsets.UTF_8;
+
     static {
-        // 設定ファイルの読込
         settings = new Properties();
-        try (InputStream in = new FileInputStream(SETTING_PROPERTIES)) {
-            settings.load(in);
+        try (Reader reader = Files.newBufferedReader(Paths.get(SETTING_PROPERTIES), CHARSET)) {
+            settings.load(reader);
+        } catch (NoSuchFileException e) {
+            System.out.println(SETTING_PROPERTIES + " が見つかりませんでした。");
         } catch (IOException e) {
-            try {
-                Files.createFile(Paths.get(SETTING_PROPERTIES));
-            } catch (IOException e2) {
-                throw new RuntimeException(e2);
-            }
+            throw new RuntimeException(e);
         }
     }
 
-    private static enum PropKeys {
+    private enum PropKeys {
         WORK_DIR("TextField.workDir"),
         EXTENSION("ComboBox.extension"),
         LAST_MODIFIED_DATE("ComboBox.lastModifiedDate");
@@ -117,7 +111,7 @@ public class GZipFrame extends JFrame {
 
     }
 
-    private static enum Column {
+    private enum Column {
         SL(0, "SL"),
         DIR(1, "ディレクトリ"),
         FILE_NAME(2, "ファイル名"),
@@ -144,7 +138,7 @@ public class GZipFrame extends JFrame {
 
     }
 
-    private static enum Extension {
+    private enum Extension {
         OK("ok"),
         NG("ng"),
         LOG("log"),
@@ -159,7 +153,7 @@ public class GZipFrame extends JFrame {
 
     }
 
-    private static enum DateLastModified {
+    private enum DateLastModified {
         TODAY(0, "今日"),
         ONE_YEAR_AGO(-12, "1年前"),
         TWO_YEARS_AGO(-24, "2年前"),
@@ -196,8 +190,8 @@ public class GZipFrame extends JFrame {
     }
 
 
-    private static enum Size {
-        B, KB, MB, GB, TB;
+    private enum Size {
+        B, KB, MB, GB, TB
     }
 
     private static class Chunk {
@@ -292,8 +286,9 @@ public class GZipFrame extends JFrame {
         settings.setProperty(PropKeys.EXTENSION.key, getCmbBxText(cmb_extension));
         settings.setProperty(PropKeys.LAST_MODIFIED_DATE.key, getCmbBxText(cmb_lastModifiedDate));
 
-        try (OutputStream os = new FileOutputStream(SETTING_PROPERTIES)) {
-            settings.store(os, null);
+        try (Writer writer = Files
+            .newBufferedWriter(Paths.get(SETTING_PROPERTIES), CHARSET, StandardOpenOption.CREATE)) {
+            settings.store(writer, null);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -311,10 +306,30 @@ public class GZipFrame extends JFrame {
         return settings.getProperty(PropKeys.LAST_MODIFIED_DATE.key, "");
     }
 
-    /**
-     * ファイルテーブル設定
-     */
     private void setFileTable() {
+        try {
+            // 部品非活性
+            setEnabledAll(false);
+
+            // 一覧テーブルの構築
+            createFileTable();
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
+                JOptionPane.ERROR_MESSAGE);
+        } finally {
+            // 部品活性
+            setEnabledAll(true);
+        }
+    }
+
+    private void createFileTable() {
+
+        String workDir = txt_workDir.getText();
+
+        if (workDir.isEmpty()) {
+            throw new RuntimeException("作業ディレクトリは入力必須です。");
+        }
+
         ProgressMonitor monitor = new ProgressMonitor(
             this, "検索中...", "\n", 0, 100);
         monitor.setMillisToDecideToPopup(0);
@@ -322,20 +337,12 @@ public class GZipFrame extends JFrame {
         monitor.setProgress(0);
 
         SwingWorker<List<Path>, Chunk> sw = new SwingWorker<List<Path>, Chunk>() {
+
             /** 処理が重たいバックグラウンド処理 */
             @Override
             protected List<Path> doInBackground() {
                 setProgress(0);
                 publish(new Chunk(0, null));
-
-                // 部品非活性
-                setEnabledAll(false);
-
-                String workDir = txt_workDir.getText();
-
-                if (workDir.isEmpty()) {
-                    throw new RuntimeException("作業ディレクトリは入力必須です。");
-                }
 
                 // 作業ディレクトリ
                 Path startPath = Paths.get(workDir);
@@ -370,7 +377,8 @@ public class GZipFrame extends JFrame {
                     return false;
                 }
 
-                System.out.println(path.getFileName() + " (" + Thread.currentThread().getName() + ")");
+                System.out
+                    .println(path.getFileName() + " (" + Thread.currentThread().getName() + ")");
 
                 int num = atomicInteger.incrementAndGet();
 
@@ -475,18 +483,16 @@ public class GZipFrame extends JFrame {
             protected void done() {
                 try {
                     List<Path> pathList = get();
-                    setFileTable(pathList);
+                    createFileTable(pathList);
                 } catch (InterruptedException | ExecutionException e) {
                     throw new RuntimeException(e);
                 } finally {
-                    // 部品活性
-                    setEnabledAll(true);
                     monitor.close();
                 }
             }
         };
-        /** プログレスの処理 */
         sw.addPropertyChangeListener(evt -> {
+            // プログレスの処理
             if ("progress".equals(evt.getPropertyName())) {
                 monitor.setProgress((Integer) evt.getNewValue());
             }
@@ -511,7 +517,7 @@ public class GZipFrame extends JFrame {
         btn_fileCompression.setEnabled(b);
     }
 
-    private void setFileTable(List<Path> pathList) {
+    private void createFileTable(List<Path> pathList) {
         // Model取得
         TableModel tableModel = getTableModel(pathList);
 
@@ -870,9 +876,6 @@ public class GZipFrame extends JFrame {
         label3.setLabelFor(scrollPane1);
     }
 
-    /**
-     * @noinspection ALL
-     */
     public JComponent $$$getRootComponent$$$() {
         return pnl_root;
     }
