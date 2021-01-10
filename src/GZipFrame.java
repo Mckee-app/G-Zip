@@ -143,6 +143,7 @@ public class GZipFrame extends JFrame {
         NG("ng"),
         LOG("log"),
         TXT("txt"),
+        BAK("bak"),
         CSV("csv");
 
         String extName;
@@ -150,7 +151,6 @@ public class GZipFrame extends JFrame {
         Extension(String extName) {
             this.extName = extName;
         }
-
     }
 
     private enum DateLastModified {
@@ -186,9 +186,7 @@ public class GZipFrame extends JFrame {
             }
             return null;
         }
-
     }
-
 
     private enum Size {
         B, KB, MB, GB, TB
