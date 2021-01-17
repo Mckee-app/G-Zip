@@ -79,7 +79,7 @@ public class GZipFrame extends JFrame {
     private static final String COMBO_BOX_SEPARATOR = ",";
 
     /** 設定ファイル名 */
-    private static final String SETTING_PROPERTIES = "setting.properties";
+    private static final String SETTING_PROPERTIES = "G-Zip.properties";
 
     /** 設定ファイル */
     private static final Properties settings;
@@ -601,7 +601,7 @@ public class GZipFrame extends JFrame {
         };
     }
 
-    private TableModelListener tableModelListener = e -> {
+    private final TableModelListener tableModelListener = e -> {
         if (e.getColumn() == Column.SL.columnNum) {
             DefaultTableModel model = (DefaultTableModel) e.getSource();
 
