@@ -143,7 +143,8 @@ public class GZipFrame extends JFrame {
         NG("ng"),
         LOG("log"),
         TXT("txt"),
-        BAK("bak"),
+        // Windowsのbakも考慮すると危険なので不可に変更
+//        BAK("bak"),
         CSV("csv");
 
         String extName;
@@ -410,8 +411,14 @@ public class GZipFrame extends JFrame {
                 String extensions = getCmbBxText(cmb_extension);
                 if (!extensions.isEmpty()) {
                     for (String extension : extensions.split(COMBO_BOX_SEPARATOR)) {
-                        if (path.getFileName().toString().endsWith("." + extension)) {
+                        if (path.getFileName().toString().matches("^.+\\.(?i)" + extension + "$")) {
                             return true;
+                        }
+                        if (Extension.LOG.extName.equals(extension)) {
+                            // logファイルは「*.log.数値」も含める
+                            if (path.getFileName().toString().matches("^.+\\.(?i)log\\.[0-9]+$")) {
+                                return true;
+                            }
                         }
                     }
                 }
