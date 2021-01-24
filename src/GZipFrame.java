@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -64,7 +65,7 @@ public class GZipFrame extends JFrame {
     private JPanel pnl_root;
     private JTextField txt_workDir;
     private JComboBox<CheckableItem> cmb_extension;
-    private JComboBox<CheckableItem> cmb_lastModifiedDate;
+    private JComboBox<DateLastModified> cmb_lastModifiedDate;
     private JButton btn_search;
     private JCheckBox chk_deleteSL;
     private JButton btn_fileCompression;
@@ -94,7 +95,7 @@ public class GZipFrame extends JFrame {
         } catch (NoSuchFileException e) {
             System.out.println(SETTING_PROPERTIES + " が見つかりませんでした。");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new GZipRuntimeException(e);
         }
     }
 
@@ -155,7 +156,7 @@ public class GZipFrame extends JFrame {
     }
 
     private enum DateLastModified {
-        TODAY(0, "今日"),
+        TODAY(0, "今日より以前"),
         ONE_YEAR_AGO(-12, "1年前"),
         TWO_YEARS_AGO(-24, "2年前"),
         THREE_YEARS_AGO(-36, "3年前"),
@@ -177,7 +178,17 @@ public class GZipFrame extends JFrame {
                     return dlm;
                 }
             }
-            throw new RuntimeException("該当する日付が見つかりません。(" + dateName + ")");
+            throw new GZipRuntimeException("該当する日付が見つかりません。(" + dateName + ")");
+        }
+
+        public static String[] getDateNames() {
+            DateLastModified[] dlms = DateLastModified.values();
+            int len = dlms.length;
+            String[] dateNames = new String[len];
+            for (int i = 0; i < len; i++) {
+                dateNames[i] = dlms[i].dateName;
+            }
+            return dateNames;
         }
 
         public DateLastModified next() {
@@ -190,7 +201,11 @@ public class GZipFrame extends JFrame {
     }
 
     private enum Size {
-        B, KB, MB, GB, TB
+//        B,
+        KB,
+        MB,
+//        GB,
+//        TB,
     }
 
     private static class Chunk {
@@ -249,7 +264,7 @@ public class GZipFrame extends JFrame {
         // 拡張子のフィルタ付きコンボボックスを生成
         createExtCmbBx();
 
-        // 更新日のフィルタ付きコンボボックスを生成
+        // 更新日のコンボボックスを生成
         createDateLastModifiedCmbBx();
     }
 
@@ -268,28 +283,21 @@ public class GZipFrame extends JFrame {
 
     private void createDateLastModifiedCmbBx() {
         // 更新日の取得
-        List<String> list = Stream.of(getLastModifiedDate().split(COMBO_BOX_SEPARATOR))
-            .collect(Collectors.toList());
-
-        CheckableItem[] items = new CheckableItem[DateLastModified.values().length];
-        for (int i = 0; i < DateLastModified.values().length; i++) {
-            DateLastModified dateLastModified = DateLastModified.values()[i];
-            items[i] = new CheckableItem(dateLastModified.dateName,
-                list.contains(dateLastModified.dateName));
-        }
-        cmb_lastModifiedDate = new CheckedComboBox<>(new DefaultComboBoxModel<>(items));
+        cmb_lastModifiedDate = new JComboBox(DateLastModified.getDateNames());
+        cmb_lastModifiedDate.setSelectedItem(getLastModifiedDate());
     }
 
     private void storeInput() {
         settings.setProperty(PropKeys.WORK_DIR.key, txt_workDir.getText());
         settings.setProperty(PropKeys.EXTENSION.key, getCmbBxText(cmb_extension));
-        settings.setProperty(PropKeys.LAST_MODIFIED_DATE.key, getCmbBxText(cmb_lastModifiedDate));
+        settings.setProperty(PropKeys.LAST_MODIFIED_DATE.key,
+            (String) cmb_lastModifiedDate.getSelectedItem());
 
         try (Writer writer = Files
             .newBufferedWriter(Paths.get(SETTING_PROPERTIES), CHARSET, StandardOpenOption.CREATE)) {
             settings.store(writer, null);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new GZipRuntimeException(e);
         }
     }
 
@@ -313,6 +321,9 @@ public class GZipFrame extends JFrame {
             // 一覧テーブルの構築
             createFileTable();
         } catch (Exception e) {
+            // 一覧テーブルを初期化
+            createFileTable(Collections.EMPTY_LIST);
+
             JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
                 JOptionPane.ERROR_MESSAGE);
         } finally {
@@ -322,11 +333,27 @@ public class GZipFrame extends JFrame {
     }
 
     private void createFileTable() {
-
         String workDir = txt_workDir.getText();
 
         if (workDir.isEmpty()) {
-            throw new RuntimeException("作業ディレクトリは入力必須です。");
+            throw new GZipRuntimeException("作業ディレクトリは入力必須です。");
+        }
+
+        // 末尾が”/”は除去する
+        workDir = workDir.replaceAll("/+$", "");
+
+        // 作業ディレクトリ
+        Path startPath = Paths.get(workDir);
+
+        if (Files.notExists(startPath)) {
+            // 存在しないフォルダ・ファイルは処理終了
+            throw new GZipRuntimeException("存在しないフォルダ・ファイルです。");
+        }
+
+        Path root = startPath.getRoot();
+        if (root != null && root.toString().equals(workDir)) {
+            // ドライブ指定の場合は処理終了
+            throw new GZipRuntimeException("ドライブの指定はできません。");
         }
 
         ProgressMonitor monitor = new ProgressMonitor(
@@ -334,6 +361,16 @@ public class GZipFrame extends JFrame {
         monitor.setMillisToDecideToPopup(0);
         monitor.setMillisToPopup(0);
         monitor.setProgress(0);
+
+        // 最大ファイル数を取得
+        int maxFileCount = getMaxFileCount(startPath);
+        if (maxFileCount == 0) {
+            // 最大ファイル数が0件の場合は処理終了する
+            throw new GZipRuntimeException("最大ファイル数が0件です。");
+        }
+
+        // 最大値の設定
+        monitor.setMaximum(maxFileCount);
 
         SwingWorker<List<Path>, Chunk> sw = new SwingWorker<List<Path>, Chunk>() {
 
@@ -343,14 +380,8 @@ public class GZipFrame extends JFrame {
                 setProgress(0);
                 publish(new Chunk(0, null));
 
-                // 作業ディレクトリ
-                Path startPath = Paths.get(workDir);
-
-                // 最大値の設定
-                monitor.setMaximum(getFileCount(startPath));
-
                 // ファイル郡の格納リスト
-                List<Path> pathList;
+                List<Path> pathList = new ArrayList<>();
 
                 AtomicInteger atomicInteger = new AtomicInteger(0);
                 try (Stream<Path> stream = Files.find(startPath, Integer.MAX_VALUE,
@@ -358,7 +389,7 @@ public class GZipFrame extends JFrame {
                 ) {
                     pathList = stream.collect(Collectors.toList());
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new GZipRuntimeException(e);
                 }
 
                 return pathList;
@@ -438,30 +469,19 @@ public class GZipFrame extends JFrame {
                         Files.getLastModifiedTime(path).toInstant(),
                         ZoneId.systemDefault());
                 } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    throw new GZipRuntimeException(e);
                 }
 
                 // 現在日時の取得
                 LocalDateTime currentTime = LocalDateTime.now();
 
-                // 以下、最終更新日時と各特定日時との比較
-                String text = getCmbBxText(cmb_lastModifiedDate);
-                if (!text.isEmpty()) {
-                    for (String dateName : text.split(COMBO_BOX_SEPARATOR)) {
-                        DateLastModified dlm = DateLastModified.getByDateName(dateName);
-                        if (LastModifiedTime.isBefore(currentTime.plusMonths(dlm.months))) {
-                            DateLastModified dlm_next = dlm.next();
-                            if (dlm_next != null) {
-                                if (LastModifiedTime
-                                    .isAfter(currentTime.plusMonths(dlm_next.months))) {
-                                    return true;
-                                }
-                            } else {
-                                return true;
-                            }
-                        }
-                    }
+                // 最終更新日時と選択特定日時の比較
+                DateLastModified dlm = DateLastModified.getByDateName(
+                    (String) cmb_lastModifiedDate.getSelectedItem());
+                if (LastModifiedTime.isBefore(currentTime.plusMonths(dlm.months))) {
+                    return true;
                 }
+
                 return false;
             }
 
@@ -490,7 +510,7 @@ public class GZipFrame extends JFrame {
                     List<Path> pathList = get();
                     createFileTable(pathList);
                 } catch (InterruptedException | ExecutionException e) {
-                    throw new RuntimeException(e);
+                    throw new GZipRuntimeException(e);
                 } finally {
                     monitor.close();
                 }
@@ -505,13 +525,13 @@ public class GZipFrame extends JFrame {
         sw.execute();
     }
 
-    private int getFileCount(Path dir) {
-        int count;
+    private int getMaxFileCount(Path dir) {
+        int count = 0;
         try (Stream<Path> stream = Files.walk(dir)
-            .filter(p -> !p.toFile().isDirectory())) {
+            .filter(p -> Files.isRegularFile(p))) {
             count = (int) stream.count();
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new GZipRuntimeException(e);
         }
         return count;
     }
@@ -706,7 +726,7 @@ public class GZipFrame extends JFrame {
                 } catch (IOException e) {
                     JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
                         JOptionPane.ERROR_MESSAGE);
-                    throw new RuntimeException(e);
+                    throw new GZipRuntimeException(e);
                 }
             }
         }
@@ -768,7 +788,7 @@ public class GZipFrame extends JFrame {
         } catch (IOException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
                 JOptionPane.ERROR_MESSAGE);
-            throw new RuntimeException(e);
+            throw new GZipRuntimeException(e);
         }
     }
 
