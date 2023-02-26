@@ -76,6 +76,9 @@ public class GZipFrame extends JFrame {
     private JCheckBox chk_allSL;
     private JLabel lbl_totalSize;
 
+    /** テーブルの横幅 */
+    private static final int TABLE_WIDTH = 910;
+
     /** SLのデフォルト値 */
     private static final boolean DEFAULT_SL = Boolean.TRUE;
 
@@ -585,7 +588,7 @@ public class GZipFrame extends JFrame {
         maxLenMap.forEach((key, value) -> {
             BigDecimal maxLenBd = BigDecimal.valueOf(value);
             BigDecimal totalBd = BigDecimal.valueOf(total);
-            int width = maxLenBd.divide(totalBd, 2, BigDecimal.ROUND_UP).multiply(BigDecimal.valueOf(900)).intValue();
+            int width = maxLenBd.divide(totalBd, 2, BigDecimal.ROUND_UP).multiply(BigDecimal.valueOf(TABLE_WIDTH)).intValue();
             columnModel.getColumn(key.columnNum).setPreferredWidth(width);
         });
     }
