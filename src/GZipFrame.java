@@ -35,6 +35,7 @@ import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -58,6 +59,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
 import org.apache.commons.io.FileUtils;
@@ -135,14 +137,11 @@ public class GZipFrame extends JFrame {
     }
 
     private enum Extension {
-        //        OK("ok"),
-        //        NG("ng"),
-        MP4("mp4"),
         LOG("log"),
-        TXT("txt"),
-        // Windowsのbakも考慮すると危険なので不可に変更
-        //        BAK("bak"),
-        CSV("csv");
+        TMP("tmp"),
+        BAK("bak"),
+        CSV("csv"),
+        TXT("txt");
 
         private final String extName;
 
@@ -152,12 +151,14 @@ public class GZipFrame extends JFrame {
     }
 
     private enum DateLastModified {
-        TODAY(0, "今日より以前"),
-        ONE_YEAR_AGO(-12, "1年前"),
-        TWO_YEARS_AGO(-24, "2年前"),
-        THREE_YEARS_AGO(-36, "3年前"),
-        FOUR_YEARS_AGO(-48, "4年前"),
-        FIVE_YEARS_AGO(-60, "5年前");
+        TODAY(0, "全て"),
+        FIVE_YEARS_AGO(-60, "5年以上経過"),
+        FOUR_YEARS_AGO(-48, "4年以上経過"),
+        THREE_YEARS_AGO(-36, "3年以上経過"),
+        TWO_YEARS_AGO(-24, "2年以上経過"),
+        ONE_YEAR_AGO(-12, "1年以上経過"),
+        HALF_YEAR_AGO(-6, "半年以上経過"),
+        ONE_MONTH_AGO(-3, "3ヶ月以上経過");
 
         private final int months;
         private final String dateName;
@@ -332,7 +333,7 @@ public class GZipFrame extends JFrame {
         String workDir = txt_workDir.getText();
 
         if (workDir.isEmpty()) {
-            throw new GZipException("作業ディレクトリは入力必須です。");
+            throw new GZipException("作業フォルダパスは入力が必須です。");
         }
 
         // 末尾が”/”は除去する
@@ -341,9 +342,13 @@ public class GZipFrame extends JFrame {
         // 作業ディレクトリ
         Path startPath = Paths.get(workDir);
 
+        if (!Files.isDirectory(startPath)) {
+            // フォルダではない
+            throw new GZipException("作業フォルダパスを入力してください");
+        }
         if (Files.notExists(startPath)) {
             // 存在しないフォルダ・ファイルは処理終了
-            throw new GZipException("存在しないフォルダ・ファイルです。");
+            throw new GZipException("存在しない作業フォルダパスです。");
         }
 
         Path rootPath = startPath.getRoot();
@@ -360,7 +365,7 @@ public class GZipFrame extends JFrame {
         }
 
         // 検索開始
-        ProgressMonitor monitor = new ProgressMonitor(this, "検索中...", "\n", 0, 100);
+        ProgressMonitor monitor = new ProgressMonitor(this, "検索中...", System.lineSeparator(), 0, 100);
         monitor.setMillisToDecideToPopup(0);
         monitor.setMillisToPopup(0);
         monitor.setProgress(0);
@@ -420,6 +425,7 @@ public class GZipFrame extends JFrame {
 
             /**
              * 拡張子フィルター
+             *
              * @param path ファイルパス
              * @return 合致したらtrue
              */
@@ -544,7 +550,9 @@ public class GZipFrame extends JFrame {
             }
         });
 
-        // ファイルテーブルのカラム幅の設定
+        // -----------------------------
+        // テーブルのカラム幅の設定
+        // -----------------------------
 
         // SLカラム幅は固定設定
         TableColumnModel columnModel = tbl_fileList.getColumnModel();
@@ -553,20 +561,31 @@ public class GZipFrame extends JFrame {
         // それ以外のカラム幅は自動調整
         Map<Column, Integer> maxLenMap = new HashMap<>();
         Column[] columns = {Column.DIR, Column.FILE_NAME, Column.UPDATE_DATE, Column.SIZE};
+
         for (int i = 0; i < tableModel.getRowCount(); i++) {
             for (Column column : columns) {
-                Integer len = String.valueOf(tableModel.getValueAt(i, column.columnNum)).getBytes().length;
-                Integer val = maxLenMap.computeIfAbsent(column, key -> 0);
-                if (val < len) {
-                    maxLenMap.put(column, len);
-                }
+                Object value = tableModel.getValueAt(i, column.columnNum);
+
+                // レンダリングされた表示値を取得
+                TableCellRenderer tableCellRenderer = tbl_fileList.getCellRenderer(i, column.columnNum);
+                JLabel label = (JLabel) tableCellRenderer.getTableCellRendererComponent(tbl_fileList, value, false, false, i, column.columnNum);
+                String text = label.getText();
+
+                // 最大バイト数を格納
+                int len = text.getBytes().length;
+                int val = maxLenMap.computeIfAbsent(column, key -> 0);
+                maxLenMap.put(column, Math.max(len, val));
             }
         }
+
+        // バイト数の合計を取得
         int total = maxLenMap.values().stream().reduce(0, Integer::sum);
+
+        // カラム幅の設定
         maxLenMap.forEach((key, value) -> {
             BigDecimal maxLenBd = BigDecimal.valueOf(value);
             BigDecimal totalBd = BigDecimal.valueOf(total);
-            int width = maxLenBd.divide(totalBd, 2, BigDecimal.ROUND_HALF_UP).multiply(BigDecimal.valueOf(920)).intValue();
+            int width = maxLenBd.divide(totalBd, 2, BigDecimal.ROUND_UP).multiply(BigDecimal.valueOf(900)).intValue();
             columnModel.getColumn(key.columnNum).setPreferredWidth(width);
         });
     }
@@ -576,7 +595,7 @@ public class GZipFrame extends JFrame {
         Object[] columnNames = Column.getColumnNames();
 
         // 日付フォーマッター
-        SimpleDateFormat f = new SimpleDateFormat("yyyy/MM/dd HH:mm");
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm");
 
         // データ設定
         Object[][] tableData = new Object[pathList.size()][columnNames.length];
@@ -588,7 +607,7 @@ public class GZipFrame extends JFrame {
             tableData[i][Column.SL.columnNum] = DEFAULT_SL;
             tableData[i][Column.DIR.columnNum] = file.getParent();
             tableData[i][Column.FILE_NAME.columnNum] = file.getName();
-            tableData[i][Column.UPDATE_DATE.columnNum] = f.format(file.lastModified());
+            tableData[i][Column.UPDATE_DATE.columnNum] = dateFormat.format(file.lastModified());
             tableData[i][Column.SIZE.columnNum] = file.length();
         }
 
@@ -627,14 +646,19 @@ public class GZipFrame extends JFrame {
         lbl_totalSize.setText(showSize(bd.longValue()));
     }
 
+    /**
+     * 拡張子コンボボックスで選択した項目のテキストを取得
+     *
+     * @param cmbBx 拡張子コンボボックス
+     * @return 選択した項目のテキスト
+     */
     private String getCmbBxText(JComboBox<CheckableItem> cmbBx) {
         StringJoiner sj = new StringJoiner(COMBO_BOX_SEPARATOR);
-        for (int i = 0; i < cmbBx.getModel().getSize(); i++) {
-            CheckableItem item = cmbBx.getModel().getElementAt(i);
-            if (item.isSelected()) {
-                sj.add(item.toString());
-            }
-        }
+        IntStream.range(0, cmbBx.getModel().getSize())
+                 .mapToObj(i -> cmbBx.getModel().getElementAt(i))
+                 .filter(CheckableItem::isSelected)
+                 .map(CheckableItem::toString)
+                 .forEach(sj::add);
         return sj.toString();
     }
 
@@ -645,12 +669,13 @@ public class GZipFrame extends JFrame {
         // 一時的にリスナー削除
         tbl_fileList.getModel().removeTableModelListener(tableModelListener);
 
-        for (int i = 0; i < tbl_fileList.getModel().getRowCount(); i++) {
+        // 全SL制御
+        IntStream.range(0, tbl_fileList.getModel().getRowCount()).forEach(i -> {
             Boolean slTmp = (Boolean) tbl_fileList.getModel().getValueAt(i, Column.SL.columnNum);
             if (sl.booleanValue() != slTmp.booleanValue()) {
                 tbl_fileList.getModel().setValueAt(sl, i, Column.SL.columnNum);
             }
-        }
+        });
 
         // 合計サイズの設定
         setTotalSize(tbl_fileList.getModel());
@@ -664,7 +689,7 @@ public class GZipFrame extends JFrame {
      */
     private void compressFile() {
         List<Path> pathList = new ArrayList<>();
-        for (int i = 0; i < tbl_fileList.getModel().getRowCount(); i++) {
+        IntStream.range(0, tbl_fileList.getModel().getRowCount()).forEach(i -> {
             Boolean sl = (Boolean) tbl_fileList.getModel().getValueAt(i, Column.SL.columnNum);
             if (sl) {
                 // チェックあり行の処理
@@ -674,7 +699,7 @@ public class GZipFrame extends JFrame {
                 Path path = Paths.get(dir, fileName);
                 pathList.add(path);
             }
-        }
+        });
 
         if (pathList.isEmpty()) {
             JOptionPane.showMessageDialog(this, "圧縮するファイルがありません", "圧縮エラー", JOptionPane.ERROR_MESSAGE);
@@ -691,9 +716,10 @@ public class GZipFrame extends JFrame {
         if (selected == JFileChooser.APPROVE_OPTION) {
             zipFile = fileChooser.getSelectedFile();
         }
-        if (zipFile == null) {
+        if (Objects.isNull(zipFile)) {
             return;
         }
+
         String pathStr = zipFile.getPath();
         if (!pathStr.endsWith(".zip")) {
             zipFile = new File(pathStr + ".zip");
@@ -724,6 +750,12 @@ public class GZipFrame extends JFrame {
         }
     }
 
+    /**
+     * 画面で視認できるファイルサイズ
+     *
+     * @param size ファイルサイズ
+     * @return 視認できるファイルサイズ
+     */
     private String showSize(Long size) {
         return FileUtils.byteCountToDisplaySize(size);
     }
