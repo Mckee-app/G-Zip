@@ -19,15 +19,16 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.StringJoiner;
@@ -59,13 +60,13 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableModel;
+import org.apache.commons.io.FileUtils;
 
 public class GZipFrame extends JFrame {
-
     private JPanel pnl_root;
     private JTextField txt_workDir;
     private JComboBox<CheckableItem> cmb_extension;
-    private JComboBox<DateLastModified> cmb_lastModifiedDate;
+    private JComboBox<String> cmb_lastModifiedDate;
     private JButton btn_search;
     private JCheckBox chk_deleteSL;
     private JButton btn_fileCompression;
@@ -83,19 +84,21 @@ public class GZipFrame extends JFrame {
     private static final String SETTING_PROPERTIES = "G-Zip.properties";
 
     /** 設定ファイル */
-    private static final Properties settings;
+    private static final Properties settings = new Properties();
 
     /** 文字コード */
     private static final Charset CHARSET = StandardCharsets.UTF_8;
 
     static {
-        settings = new Properties();
-        try (Reader reader = Files.newBufferedReader(Paths.get(SETTING_PROPERTIES), CHARSET)) {
-            settings.load(reader);
-        } catch (NoSuchFileException e) {
-            System.out.println(SETTING_PROPERTIES + " が見つかりませんでした。");
-        } catch (IOException e) {
-            throw new GZipRuntimeException(e);
+        Path configPath = Paths.get(SETTING_PROPERTIES);
+        if (Files.exists(configPath)) {
+            try (Reader reader = Files.newBufferedReader(configPath, CHARSET)) {
+                settings.load(reader);
+            } catch (NoSuchFileException e) {
+                throw new GZipRuntimeException(SETTING_PROPERTIES + " が見つかりません。", e);
+            } catch (IOException e) {
+                throw new GZipRuntimeException(e);
+            }
         }
     }
 
@@ -104,12 +107,11 @@ public class GZipFrame extends JFrame {
         EXTENSION("ComboBox.extension"),
         LAST_MODIFIED_DATE("ComboBox.lastModifiedDate");
 
-        String key;
+        private final String key;
 
         PropKeys(String key) {
             this.key = key;
         }
-
     }
 
     private enum Column {
@@ -119,36 +121,30 @@ public class GZipFrame extends JFrame {
         UPDATE_DATE(3, "更新日時"),
         SIZE(4, "サイズ");
 
-        int columnNum;
-
-        String columnName;
+        private final int columnNum;
+        private final String columnName;
 
         Column(int columnNum, String columnName) {
             this.columnNum = columnNum;
             this.columnName = columnName;
         }
 
-        public static Object[] getColumnNames() {
-            Object[] ret = new Object[Column.values().length];
-            for (int i = 0; i < Column.values().length; i++) {
-                Column column = Column.values()[i];
-                ret[i] = column.columnName;
-            }
-            return ret;
+        private static Object[] getColumnNames() {
+            return Arrays.stream(Column.values()).map(column -> column.columnName).toArray();
         }
-
     }
 
     private enum Extension {
-        OK("ok"),
-        NG("ng"),
+        //        OK("ok"),
+        //        NG("ng"),
+        MP4("mp4"),
         LOG("log"),
         TXT("txt"),
         // Windowsのbakも考慮すると危険なので不可に変更
-//        BAK("bak"),
+        //        BAK("bak"),
         CSV("csv");
 
-        String extName;
+        private final String extName;
 
         Extension(String extName) {
             this.extName = extName;
@@ -163,17 +159,16 @@ public class GZipFrame extends JFrame {
         FOUR_YEARS_AGO(-48, "4年前"),
         FIVE_YEARS_AGO(-60, "5年前");
 
-        String dateName;
-
-        int months;
+        private final int months;
+        private final String dateName;
 
         DateLastModified(int months, String dateName) {
             this.months = months;
             this.dateName = dateName;
         }
 
-        public static DateLastModified getByDateName(String dateName) {
-            for (DateLastModified dlm : DateLastModified.values()) {
+        private static DateLastModified getByDateName(String dateName) {
+            for (DateLastModified dlm : values()) {
                 if (dlm.dateName.equals(dateName)) {
                     return dlm;
                 }
@@ -181,35 +176,18 @@ public class GZipFrame extends JFrame {
             throw new GZipRuntimeException("該当する日付が見つかりません。(" + dateName + ")");
         }
 
-        public static String[] getDateNames() {
-            DateLastModified[] dlms = DateLastModified.values();
-            int len = dlms.length;
+        private static String[] getDateNames() {
+            DateLastModified[] dateLastModified = values();
+            int len = dateLastModified.length;
             String[] dateNames = new String[len];
             for (int i = 0; i < len; i++) {
-                dateNames[i] = dlms[i].dateName;
+                dateNames[i] = dateLastModified[i].dateName;
             }
             return dateNames;
         }
-
-        public DateLastModified next() {
-            int i = this.ordinal() + 1;
-            if (i < DateLastModified.values().length) {
-                return DateLastModified.values()[i];
-            }
-            return null;
-        }
-    }
-
-    private enum Size {
-//        B,
-        KB,
-        MB,
-//        GB,
-//        TB,
     }
 
     private static class Chunk {
-
         private final int num;
         private final Path path;
 
@@ -219,6 +197,9 @@ public class GZipFrame extends JFrame {
         }
     }
 
+    /**
+     * 初期表示
+     */
     public GZipFrame() {
         $$$setupUI$$$();
         setTitle("G-Zip");
@@ -257,7 +238,7 @@ public class GZipFrame extends JFrame {
         });
 
         // ファイルテーブル設定
-        setFileTable();
+        setFileTable(false);
     }
 
     private void createUIComponents() {
@@ -270,8 +251,7 @@ public class GZipFrame extends JFrame {
 
     private void createExtCmbBx() {
         // 拡張子の取得
-        List<String> extList = Stream.of(getExtension().split(COMBO_BOX_SEPARATOR))
-            .collect(Collectors.toList());
+        List<String> extList = Stream.of(getExtension().split(COMBO_BOX_SEPARATOR)).collect(Collectors.toList());
 
         CheckableItem[] items = new CheckableItem[Extension.values().length];
         for (int i = 0; i < Extension.values().length; i++) {
@@ -283,18 +263,28 @@ public class GZipFrame extends JFrame {
 
     private void createDateLastModifiedCmbBx() {
         // 更新日の取得
-        cmb_lastModifiedDate = new JComboBox(DateLastModified.getDateNames());
+        //noinspection UndesirableClassUsage
+        cmb_lastModifiedDate = new JComboBox<>(DateLastModified.getDateNames());
         cmb_lastModifiedDate.setSelectedItem(getLastModifiedDate());
     }
 
     private void storeInput() {
-        settings.setProperty(PropKeys.WORK_DIR.key, txt_workDir.getText());
         settings.setProperty(PropKeys.EXTENSION.key, getCmbBxText(cmb_extension));
-        settings.setProperty(PropKeys.LAST_MODIFIED_DATE.key,
-            (String) cmb_lastModifiedDate.getSelectedItem());
+        settings.setProperty(PropKeys.LAST_MODIFIED_DATE.key, (String) cmb_lastModifiedDate.getSelectedItem());
+        settings.setProperty(PropKeys.WORK_DIR.key, Paths.get(txt_workDir.getText()).normalize().toString());
 
-        try (Writer writer = Files
-            .newBufferedWriter(Paths.get(SETTING_PROPERTIES), CHARSET, StandardOpenOption.CREATE)) {
+        Path configPath = Paths.get(SETTING_PROPERTIES);
+
+        if (Files.notExists(configPath)) {
+            // 設定ファイルが存在しない場合は新規作成する
+            try {
+                Files.createFile(configPath);
+            } catch (IOException e) {
+                throw new GZipRuntimeException(e);
+            }
+        }
+
+        try (Writer writer = Files.newBufferedWriter(configPath, CHARSET, StandardOpenOption.TRUNCATE_EXISTING)) {
             settings.store(writer, null);
         } catch (IOException e) {
             throw new GZipRuntimeException(e);
@@ -313,30 +303,36 @@ public class GZipFrame extends JFrame {
         return settings.getProperty(PropKeys.LAST_MODIFIED_DATE.key, "");
     }
 
-    private void setFileTable() {
+    private void setFileTable(boolean showErrorMessage) {
         try {
             // 部品非活性
             setEnabledAll(false);
 
             // 一覧テーブルの構築
             createFileTable();
-        } catch (Exception e) {
+        } catch (GZipException e) {
             // 一覧テーブルを初期化
-            createFileTable(Collections.EMPTY_LIST);
+            createFileTable(Collections.emptyList());
 
-            JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
-                JOptionPane.ERROR_MESSAGE);
+            if (showErrorMessage) {
+                // エラーメッセージ
+                JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(), JOptionPane.ERROR_MESSAGE);
+            }
         } finally {
             // 部品活性
             setEnabledAll(true);
         }
     }
 
-    private void createFileTable() {
+    private void setFileTable() {
+        setFileTable(true);
+    }
+
+    private void createFileTable() throws GZipException {
         String workDir = txt_workDir.getText();
 
         if (workDir.isEmpty()) {
-            throw new GZipRuntimeException("作業ディレクトリは入力必須です。");
+            throw new GZipException("作業ディレクトリは入力必須です。");
         }
 
         // 末尾が”/”は除去する
@@ -347,46 +343,42 @@ public class GZipFrame extends JFrame {
 
         if (Files.notExists(startPath)) {
             // 存在しないフォルダ・ファイルは処理終了
-            throw new GZipRuntimeException("存在しないフォルダ・ファイルです。");
+            throw new GZipException("存在しないフォルダ・ファイルです。");
         }
 
-        Path root = startPath.getRoot();
-        if (root != null && root.toString().equals(workDir)) {
+        Path rootPath = startPath.getRoot();
+        if (!Objects.isNull(rootPath) && rootPath.toFile().getPath().equals(workDir)) {
             // ドライブ指定の場合は処理終了
-            throw new GZipRuntimeException("ドライブの指定はできません。");
+            throw new GZipException("ドライブの指定はできません。");
         }
 
-        ProgressMonitor monitor = new ProgressMonitor(
-            this, "検索中...", "\n", 0, 100);
+        // ファイル数を取得
+        int fileCount = getFileCount(startPath);
+        if (fileCount == 0) {
+            // ファイル数が0件の場合は処理終了する
+            throw new GZipException("ファイル数が0件です。");
+        }
+
+        // 検索開始
+        ProgressMonitor monitor = new ProgressMonitor(this, "検索中...", "\n", 0, 100);
         monitor.setMillisToDecideToPopup(0);
         monitor.setMillisToPopup(0);
         monitor.setProgress(0);
-
-        // 最大ファイル数を取得
-        int maxFileCount = getMaxFileCount(startPath);
-        if (maxFileCount == 0) {
-            // 最大ファイル数が0件の場合は処理終了する
-            throw new GZipRuntimeException("最大ファイル数が0件です。");
-        }
-
         // 最大値の設定
-        monitor.setMaximum(maxFileCount);
+        monitor.setMaximum(fileCount);
 
         SwingWorker<List<Path>, Chunk> sw = new SwingWorker<List<Path>, Chunk>() {
 
             /** 処理が重たいバックグラウンド処理 */
-            @Override
-            protected List<Path> doInBackground() {
+            @Override protected List<Path> doInBackground() {
                 setProgress(0);
                 publish(new Chunk(0, null));
 
                 // ファイル郡の格納リスト
-                List<Path> pathList = new ArrayList<>();
+                List<Path> pathList;
 
                 AtomicInteger atomicInteger = new AtomicInteger(0);
-                try (Stream<Path> stream = Files.find(startPath, Integer.MAX_VALUE,
-                    (path, basicFileAttributes) -> isMatched(path, atomicInteger))
-                ) {
+                try (Stream<Path> stream = Files.find(startPath, Integer.MAX_VALUE, (path, basicFileAttributes) -> isMatched(path, atomicInteger))) {
                     pathList = stream.collect(Collectors.toList());
                 } catch (IOException e) {
                     throw new GZipRuntimeException(e);
@@ -397,6 +389,7 @@ public class GZipFrame extends JFrame {
 
             /**
              * ファイルフィルター
+             *
              * @param path ファイルパス
              * @param atomicInteger インクリメント整数
              * @return 合致したらtrue
@@ -407,14 +400,12 @@ public class GZipFrame extends JFrame {
                     return false;
                 }
 
-                System.out
-                    .println(path.getFileName() + " (" + Thread.currentThread().getName() + ")");
+                System.out.println(path.getFileName() + " (" + Thread.currentThread().getName() + ")");
 
                 int num = atomicInteger.incrementAndGet();
 
-                int percentage = BigDecimal.valueOf(num)
-                    .divide(BigDecimal.valueOf(monitor.getMaximum()), 2, RoundingMode.DOWN)
-                    .multiply(BigDecimal.valueOf(100)).intValue();
+                int percentage = BigDecimal.valueOf(num).divide(BigDecimal.valueOf(monitor.getMaximum()), 2, RoundingMode.DOWN)
+                                           .multiply(BigDecimal.valueOf(100)).intValue();
 
                 if (percentage == 100) {
                     // 100%だと進捗モニターが非表示となるため99%にする
@@ -423,12 +414,6 @@ public class GZipFrame extends JFrame {
 
                 setProgress(percentage);
                 publish(new Chunk(num, path));
-
-//                try {
-//                    Thread.sleep(50);
-//                } catch (InterruptedException e) {
-//                    System.err.println(e.toString());
-//                }
 
                 return isMatchedExtension(path) && isMatchedDate(path);
             }
@@ -458,6 +443,7 @@ public class GZipFrame extends JFrame {
 
             /**
              * 更新日フィルター
+             *
              * @param path ファイルパス
              * @return 合致したらtrue
              */
@@ -465,9 +451,7 @@ public class GZipFrame extends JFrame {
                 LocalDateTime LastModifiedTime;
                 try {
                     // 当該ファイルの最終更新日時取得
-                    LastModifiedTime = LocalDateTime.ofInstant(
-                        Files.getLastModifiedTime(path).toInstant(),
-                        ZoneId.systemDefault());
+                    LastModifiedTime = LocalDateTime.ofInstant(Files.getLastModifiedTime(path).toInstant(), ZoneId.systemDefault());
                 } catch (IOException e) {
                     throw new GZipRuntimeException(e);
                 }
@@ -476,27 +460,17 @@ public class GZipFrame extends JFrame {
                 LocalDateTime currentTime = LocalDateTime.now();
 
                 // 最終更新日時と選択特定日時の比較
-                DateLastModified dlm = DateLastModified.getByDateName(
-                    (String) cmb_lastModifiedDate.getSelectedItem());
-                if (LastModifiedTime.isBefore(currentTime.plusMonths(dlm.months))) {
-                    return true;
-                }
-
-                return false;
+                DateLastModified dlm = DateLastModified.getByDateName((String) cmb_lastModifiedDate.getSelectedItem());
+                return LastModifiedTime.isBefore(currentTime.plusMonths(dlm.months));
             }
 
             /** 途中経過の表示 */
-            @Override
-            protected void process(List<Chunk> chunks) {
+            @Override protected void process(List<Chunk> chunks) {
                 chunks.forEach(chunk -> {
                     if (Objects.isNull(chunk.path)) {
                         return;
                     }
-                    String message = chunk.num
-                        + "/"
-                        + monitor.getMaximum()
-                        + ":"
-                        + chunk.path.getFileName();
+                    String message = chunk.num + "/" + monitor.getMaximum() + ":" + chunk.path.getFileName();
                     monitor.setNote(message);
 
                     System.out.println(message + " (" + Thread.currentThread().getName() + ")");
@@ -504,8 +478,7 @@ public class GZipFrame extends JFrame {
             }
 
             /** 処理終了 */
-            @Override
-            protected void done() {
+            @Override protected void done() {
                 try {
                     List<Path> pathList = get();
                     createFileTable(pathList);
@@ -525,10 +498,9 @@ public class GZipFrame extends JFrame {
         sw.execute();
     }
 
-    private int getMaxFileCount(Path dir) {
-        int count = 0;
-        try (Stream<Path> stream = Files.walk(dir)
-            .filter(p -> Files.isRegularFile(p))) {
+    private int getFileCount(Path dir) {
+        int count;
+        try (Stream<Path> stream = Files.walk(dir).filter(Files::isRegularFile)) {
             count = (int) stream.count();
         } catch (IOException e) {
             throw new GZipRuntimeException(e);
@@ -556,32 +528,47 @@ public class GZipFrame extends JFrame {
         tbl_fileList.setRowSelectionAllowed(true);
         tbl_fileList.getModel().addTableModelListener(tableModelListener);
 
-        // 数値フォーマット設定
-        tbl_fileList.getColumnModel().getColumn(Column.SIZE.columnNum)
-            .setCellRenderer(new DefaultTableCellRenderer() {
-                {
-                    setHorizontalAlignment(JLabel.RIGHT);
-                }
+        tbl_fileList.getColumnModel().getColumn(Column.SIZE.columnNum).setCellRenderer(new DefaultTableCellRenderer() {
+            {
+                // 右寄せ
+                setHorizontalAlignment(JLabel.RIGHT);
+            }
 
-                @Override
-                public Component getTableCellRendererComponent(JTable table, Object obj,
-                    boolean isSelected, boolean hasFocus, int row, int column) {
-                    if (obj instanceof Long) {
-                        obj = showSize((Long) obj, Size.KB);
-                    }
-                    return super
-                        .getTableCellRendererComponent(table, obj, isSelected, hasFocus, row,
-                            column);
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object obj, boolean isSelected, boolean hasFocus, int row, int column) {
+                if (obj instanceof Long) {
+                    // 数値フォーマット設定
+                    obj = showSize((Long) obj);
                 }
-            });
+                return super.getTableCellRendererComponent(table, obj, isSelected, hasFocus, row, column);
+            }
+        });
 
         // ファイルテーブルのカラム幅の設定
+
+        // SLカラム幅は固定設定
         TableColumnModel columnModel = tbl_fileList.getColumnModel();
         columnModel.getColumn(Column.SL.columnNum).setPreferredWidth(30);
-        columnModel.getColumn(Column.DIR.columnNum).setPreferredWidth(500);
-        columnModel.getColumn(Column.FILE_NAME.columnNum).setPreferredWidth(200);
-        columnModel.getColumn(Column.UPDATE_DATE.columnNum).setPreferredWidth(120);
-        columnModel.getColumn(Column.SIZE.columnNum).setPreferredWidth(100);
+
+        // それ以外のカラム幅は自動調整
+        Map<Column, Integer> maxLenMap = new HashMap<>();
+        Column[] columns = {Column.DIR, Column.FILE_NAME, Column.UPDATE_DATE, Column.SIZE};
+        for (int i = 0; i < tableModel.getRowCount(); i++) {
+            for (Column column : columns) {
+                Integer len = String.valueOf(tableModel.getValueAt(i, column.columnNum)).getBytes().length;
+                Integer val = maxLenMap.computeIfAbsent(column, key -> 0);
+                if (val < len) {
+                    maxLenMap.put(column, len);
+                }
+            }
+        }
+        int total = maxLenMap.values().stream().reduce(0, Integer::sum);
+        maxLenMap.forEach((key, value) -> {
+            BigDecimal maxLenBd = BigDecimal.valueOf(value);
+            BigDecimal totalBd = BigDecimal.valueOf(total);
+            int width = maxLenBd.divide(totalBd, 2, BigDecimal.ROUND_HALF_UP).multiply(BigDecimal.valueOf(920)).intValue();
+            columnModel.getColumn(key.columnNum).setPreferredWidth(width);
+        });
     }
 
     private TableModel getTableModel(List<Path> pathList) {
@@ -589,7 +576,7 @@ public class GZipFrame extends JFrame {
         Object[] columnNames = Column.getColumnNames();
 
         // 日付フォーマッター
-        SimpleDateFormat f = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.JAPAN);
+        SimpleDateFormat f = new SimpleDateFormat("yyyy/MM/dd HH:mm");
 
         // データ設定
         Object[][] tableData = new Object[pathList.size()][columnNames.length];
@@ -606,16 +593,14 @@ public class GZipFrame extends JFrame {
         }
 
         return new DefaultTableModel(tableData, columnNames) {
-            @Override
-            public Class<?> getColumnClass(int colIndex) {
+            @Override public Class<?> getColumnClass(int colIndex) {
                 if (tableData.length == 0) {
                     return Object.class;
                 }
                 return getValueAt(0, colIndex).getClass();
             }
 
-            @Override
-            public boolean isCellEditable(int row, int column) {
+            @Override public boolean isCellEditable(int row, int column) {
                 return Column.SL.columnNum == column;
             }
         };
@@ -639,7 +624,7 @@ public class GZipFrame extends JFrame {
                 bd = bd.add(BigDecimal.valueOf(size));
             }
         }
-        lbl_totalSize.setText(showSize(bd.longValue(), Size.MB));
+        lbl_totalSize.setText(showSize(bd.longValue()));
     }
 
     private String getCmbBxText(JComboBox<CheckableItem> cmbBx) {
@@ -684,8 +669,7 @@ public class GZipFrame extends JFrame {
             if (sl) {
                 // チェックあり行の処理
                 String dir = (String) tbl_fileList.getModel().getValueAt(i, Column.DIR.columnNum);
-                String fileName = (String) tbl_fileList.getModel()
-                    .getValueAt(i, Column.FILE_NAME.columnNum);
+                String fileName = (String) tbl_fileList.getModel().getValueAt(i, Column.FILE_NAME.columnNum);
 
                 Path path = Paths.get(dir, fileName);
                 pathList.add(path);
@@ -693,8 +677,7 @@ public class GZipFrame extends JFrame {
         }
 
         if (pathList.isEmpty()) {
-            JOptionPane
-                .showMessageDialog(this, "圧縮するファイルがありません", "圧縮エラー", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "圧縮するファイルがありません", "圧縮エラー", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -724,16 +707,15 @@ public class GZipFrame extends JFrame {
                 try {
                     Files.delete(path);
                 } catch (IOException e) {
-                    JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
-                        JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(), JOptionPane.ERROR_MESSAGE);
                     throw new GZipRuntimeException(e);
                 }
             }
         }
 
-        String message =
-            "正常に圧縮が完了しました。" + "\nパス：" + zipFile.getPath() + "\nサイズ：" + showSize(zipFile.length(),
-                Size.MB);
+        String message = String.format("正常に圧縮が完了しました。%sパス: %s%sサイズ: %s"
+                , System.lineSeparator(), zipFile.getPath()
+                , System.lineSeparator(), showSize(zipFile.length()));
         JOptionPane.showMessageDialog(this, message, "圧縮完了", JOptionPane.INFORMATION_MESSAGE);
 
         if (chk_deleteSL.isSelected()) {
@@ -742,18 +724,8 @@ public class GZipFrame extends JFrame {
         }
     }
 
-    private String showSize(Long len, Size size) {
-        BigDecimal ret = BigDecimal.valueOf(len);
-        for (int i = 0; i < size.ordinal(); i++) {
-            if (size == Size.KB) {
-                ret = ret.divide(BigDecimal.valueOf(1024), 0, RoundingMode.UP);
-            } else {
-                ret = ret.divide(BigDecimal.valueOf(1024), 2, RoundingMode.UP);
-            }
-        }
-
-        DecimalFormat df = new DecimalFormat("###,##0.##");
-        return df.format(ret).concat(size.name());
+    private String showSize(Long size) {
+        return FileUtils.byteCountToDisplaySize(size);
     }
 
     /**
@@ -761,8 +733,7 @@ public class GZipFrame extends JFrame {
      *
      * @return Zipファイル名
      */
-    @SuppressWarnings("SpellCheckingInspection")
-    private String getZipFileName() {
+    @SuppressWarnings("SpellCheckingInspection") private String getZipFileName() {
         DateTimeFormatter f = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
         return f.format(LocalDateTime.now());
     }
@@ -774,9 +745,9 @@ public class GZipFrame extends JFrame {
      * @param zipFile  圧縮ファイル
      */
     private void zip(List<Path> pathList, File zipFile) {
-        try (FileOutputStream fos = new FileOutputStream(
-            zipFile); BufferedOutputStream bos = new BufferedOutputStream(
-            fos); ZipOutputStream zos = new ZipOutputStream(bos, Charset.defaultCharset())) {
+        try (FileOutputStream fos = new FileOutputStream(zipFile);
+                BufferedOutputStream bos = new BufferedOutputStream(fos);
+                ZipOutputStream zos = new ZipOutputStream(bos, Charset.defaultCharset())) {
             String removeStr = txt_workDir.getText() + File.separator;
             for (Path path : pathList) {
                 byte[] bytes = Files.readAllBytes(path);
@@ -786,15 +757,13 @@ public class GZipFrame extends JFrame {
                 zos.write(bytes);
             }
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(),
-                JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, e.getMessage(), e.getClass().getName(), JOptionPane.ERROR_MESSAGE);
             throw new GZipRuntimeException(e);
         }
     }
 
     /**
-     * Method generated by IntelliJ IDEA GUI Designer >>> IMPORTANT!! <<< DO NOT edit this method OR
-     * call it in your code!
+     * Method generated by IntelliJ IDEA GUI Designer >>> IMPORTANT!! <<< DO NOT edit this method OR call it in your code!
      *
      * @noinspection ALL
      */
@@ -808,90 +777,59 @@ public class GZipFrame extends JFrame {
         pnl_root.setVisible(true);
         final JPanel panel1 = new JPanel();
         panel1.setLayout(new GridLayoutManager(1, 5, new Insets(0, 0, 0, 0), -1, -1));
-        pnl_root.add(panel1,
-            new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_BOTH,
+        pnl_root.add(panel1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null,
-                null,
-                null, 0, false));
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JLabel label1 = new JLabel();
         label1.setText("作業ディレクトリ");
-        panel1.add(label1,
-            new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE,
-                GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null,
-                null, 0,
-                false));
+        panel1.add(label1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
+                GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         txt_workDir = new JTextField();
         txt_workDir.setText("");
-        panel1.add(txt_workDir, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST,
-            GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW,
-            GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(350, -1), null, 0, false));
+        panel1.add(txt_workDir,
+                new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW,
+                        GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(350, -1), null, 0, false));
         final JLabel label2 = new JLabel();
         label2.setText("拡張子");
-        panel1.add(label2,
-            new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE,
-                GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null,
-                null, 0,
-                false));
-        panel1.add(cmb_extension, new GridConstraints(0, 4, 1, 1, GridConstraints.ANCHOR_WEST,
-            GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_GROW,
-            GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel1.add(label2, new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
+                GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel1.add(cmb_extension,
+                new GridConstraints(0, 4, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_GROW,
+                        GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel2 = new JPanel();
         panel2.setLayout(new GridLayoutManager(1, 12, new Insets(0, 0, 0, 0), -1, -1));
-        pnl_root.add(panel2,
-            new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_BOTH,
+        pnl_root.add(panel2, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null,
-                null,
-                null, 0, false));
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         chk_deleteSL = new JCheckBox();
         chk_deleteSL.setText("選択ファイル削除");
-        panel2.add(chk_deleteSL,
-            new GridConstraints(0, 10, 1, 1, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_NONE,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel2.add(chk_deleteSL, new GridConstraints(0, 10, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_NONE,
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0,
+                false));
         btn_fileCompression = new JButton();
         btn_fileCompression.setHorizontalAlignment(0);
         btn_fileCompression.setText("圧縮");
-        panel2.add(btn_fileCompression,
-            new GridConstraints(0, 11, 1, 1, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_NONE,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
+        panel2.add(btn_fileCompression, new GridConstraints(0, 11, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_NONE,
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null,
+                new Dimension(150, -1), null, 0, false));
         final JPanel panel3 = new JPanel();
         panel3.setLayout(new GridLayoutManager(2, 2, new Insets(0, 0, 0, 0), -1, -1));
-        pnl_root.add(panel3,
-            new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_BOTH,
+        pnl_root.add(panel3, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null,
-                null,
-                null, 0, false));
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JPanel panel4 = new JPanel();
         panel4.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
-        panel3.add(panel4,
-            new GridConstraints(0, 0, 1, 2, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_BOTH,
+        panel3.add(panel4, new GridConstraints(0, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null,
-                null,
-                null, 0, false));
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JLabel label3 = new JLabel();
         label3.setText("ファイル一覧");
-        panel4.add(label3,
-            new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE,
-                GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null,
-                new Dimension(526, 16), null, 0, false));
+        panel4.add(label3, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
+                GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(526, 16), null, 0, false));
         final JScrollPane scrollPane1 = new JScrollPane();
-        panel3.add(scrollPane1,
-            new GridConstraints(1, 0, 1, 2, GridConstraints.ANCHOR_CENTER,
-                GridConstraints.FILL_BOTH,
+        panel3.add(scrollPane1, new GridConstraints(1, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW,
-                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null,
-                null, null, 0, false));
+                GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         tbl_fileList = new JTable();
         tbl_fileList.setAutoCreateRowSorter(true);
         tbl_fileList.setAutoResizeMode(0);
