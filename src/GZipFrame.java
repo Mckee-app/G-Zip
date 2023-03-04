@@ -56,6 +56,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.ProgressMonitor;
 import javax.swing.SwingWorker;
 import javax.swing.event.TableModelListener;
+import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -75,6 +76,7 @@ public class GZipFrame extends JFrame {
     private JTable tbl_fileList;
     private JCheckBox chk_allSL;
     private JLabel lbl_totalSize;
+    private JButton btn_folderSelect;
 
     /** テーブルの横幅 */
     private static final int TABLE_WIDTH = 910;
@@ -211,6 +213,9 @@ public class GZipFrame extends JFrame {
         // 作業ディレクトリの取得
         txt_workDir.setText(getWorkDir());
 
+        // 「参照」ボタン押下時のロジック
+        btn_folderSelect.addActionListener(e -> folderSelect());
+
         // 「全SLチェック」初期値設定
         chk_allSL.setSelected(DEFAULT_SL);
 
@@ -243,6 +248,32 @@ public class GZipFrame extends JFrame {
 
         // ファイルテーブル設定
         setFileTable(false);
+    }
+
+    private void folderSelect() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("検索ルートディレクトリを決める");
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        fileChooser.setSelectedFile(new File(txt_workDir.getText()));
+        fileChooser.setFileFilter(new FileFilter() {
+            @Override public boolean accept(File file) {
+                return file.isDirectory();
+            }
+
+            @Override public String getDescription() {
+                return "全てのフォルダ";
+            }
+        });
+
+        File file = null;
+        int selected = fileChooser.showOpenDialog(this);
+        if (selected == JFileChooser.APPROVE_OPTION) {
+            file = fileChooser.getSelectedFile();
+        }
+        if (Objects.isNull(file)) {
+            return;
+        }
+        txt_workDir.setText(file.getPath());
     }
 
     private void createUIComponents() {
@@ -816,7 +847,6 @@ public class GZipFrame extends JFrame {
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JLabel label1 = new JLabel();
-        label1.setText("作業ディレクトリ");
         panel1.add(label1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
                 GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         txt_workDir = new JTextField();
@@ -825,7 +855,6 @@ public class GZipFrame extends JFrame {
                 new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW,
                         GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(350, -1), null, 0, false));
         final JLabel label2 = new JLabel();
-        label2.setText("拡張子");
         panel1.add(label2, new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
                 GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         panel1.add(cmb_extension,
@@ -837,13 +866,11 @@ public class GZipFrame extends JFrame {
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         chk_deleteSL = new JCheckBox();
-        chk_deleteSL.setText("選択ファイル削除");
         panel2.add(chk_deleteSL, new GridConstraints(0, 10, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_NONE,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0,
                 false));
         btn_fileCompression = new JButton();
         btn_fileCompression.setHorizontalAlignment(0);
-        btn_fileCompression.setText("圧縮");
         panel2.add(btn_fileCompression, new GridConstraints(0, 11, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_NONE,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null,
                 new Dimension(150, -1), null, 0, false));
@@ -858,7 +885,6 @@ public class GZipFrame extends JFrame {
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
                 GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JLabel label3 = new JLabel();
-        label3.setText("ファイル一覧");
         panel4.add(label3, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED,
                 GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(526, 16), null, 0, false));
         final JScrollPane scrollPane1 = new JScrollPane();
